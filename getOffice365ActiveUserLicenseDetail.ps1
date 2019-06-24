@@ -13,11 +13,11 @@
 
 .TAGS Office365 GraphAPI OutlookMail OutlookREST Rest API
 
-.LICENSEURI
+.LICENSEURI https://raw.githubusercontent.com/junecastillote/getOffice365ActiveUserLicenseDetail/master/LICENSE
 
-.PROJECTURI
+.PROJECTURI https://github.com/junecastillote/getOffice365ActiveUserLicenseDetail
 
-.ICONURI
+.ICONURI 
 
 .EXTERNALMODULEDEPENDENCIES 
 
@@ -35,9 +35,23 @@
 <# 
 
 .DESCRIPTION 
- Get Active Users' Assigned Licenses using MS Graph API and Outlook Mail REST API 
+ Get Active Users' Assigned Licenses using MS Graph API and Outlook Mail REST API, capable of sending the resulting CSV by email.
 
-#> 
+#>
+
+<#
+.SYNOPSIS
+    Get Active Users' Assigned Licenses using MS Graph API and Outlook Mail REST API, capable of sending the resulting CSV by email.
+.EXAMPLE
+    PS C:\> .\getOffice365ActiveUserLicenseDetail.ps1 -appID <appID> -appKey <appKey> -tenantID <tenantID>
+    This example will query the License assignment data from Office 365 and save the resuting CSV file in the ".\Report" folder.
+.EXAMPLE
+    PS C:\> .\getOffice365ActiveUserLicenseDetail.ps1 -appID <appID> -appKey <appKey> -tenantID <tenantID> -ReportPath C:\Temp
+    This example will query the License assignment data from Office 365 and save the resuting CSV file in the "C:\Temp" folder.
+.EXAMPLE
+    PS C:\> .\getOffice365ActiveUserLicenseDetail.ps1 -appID <appID> -appKey <appKey> -tenantID <tenantID> -ReportPath C:\Temp -sendEmail $true -From sender@domain.com -To recipient@domain.com
+    This example will query the License assignment data from Office 365 and save the resuting CSV file in the "C:\Temp" folder. Then send the summary report by email with the CSV file attached.
+#>
 Param(
     [CmdletBinding()]   
     
@@ -100,7 +114,7 @@ Function Get-TimeZoneInfo
 {  
 	$tzName = ([System.TimeZone]::CurrentTimeZone).StandardName
 	$tzInfo = [System.TimeZoneInfo]::FindSystemTimeZoneById($tzName)
-	Return $tzInfo	
+	Return $tzInfo
 }
 #Function to stop transcribing
 Function Stop-TxnLogging
@@ -174,6 +188,15 @@ Stop-TxnLogging
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $script_root = Split-Path -Parent -Path $MyInvocation.MyCommand.Definition
 $fileSuffix = (Get-Date -Format "dd-MMM-yyyy")
+
+if ($PSVersionTable.psversion.Major -lt 5) 
+{
+    $scriptInfo = Get-ScriptInfo -Path $MyInvocation.MyCommand.Definition
+}
+else 
+{
+    $scriptInfo = Test-ScriptFileInfo -Path $MyInvocation.MyCommand.Definition
+}
 
 #Region Paths
 #..........................................................
@@ -249,7 +272,7 @@ if ($To)
 }
 
 #Graph API Token
-WriteInfo "Acquire Graph Token"
+WriteInfo "Acquire Graph Token."
 try {
 $body = @{grant_type="client_credentials";scope="https://graph.microsoft.com/.default";client_id=$appID;client_secret=$appKey}
 $oauth = Invoke-RestMethod -Method Post -Uri https://login.microsoftonline.com/$tenantID/oauth2/v2.0/token -Body $body
@@ -288,7 +311,7 @@ $fileContentBytes = [System.Text.Encoding]::UTF8.GetBytes((get-content $ReportCS
 $base64_csv = [System.Convert]::ToBase64String($fileContentBytes)
 
 #Outlook API
-WriteInfo "Acquire Outlook Token"
+WriteInfo "Acquire Outlook Token."
 
 try {
     $outlookMailApiUri = "https://outlook.office.com/api/v2.0/users/$($From)/sendmail"
@@ -324,54 +347,11 @@ $messageSubject = "[$($organizationName)] Assigned Licenses Report : " + (Get-Da
 
 $cssString = @'
 <style type="text/css">
-table.steelBlueCols {
-    font-family: "Arial Black", Gadget, sans-serif;
-    border: 4px solid #555555;
-    background-color: #555555;
-    width: 400px;
-    text-align: center;
-    border-collapse: collapse;
-  }
-  table.steelBlueCols td, table.steelBlueCols th {
-    border: 1px solid #555555;
-    padding: 5px 10px;
-  }
-  table.steelBlueCols tbody td {
-    font-size: 12px;
-    font-weight: bold;
-    color: #FFFFFF;
-  }
-  table.steelBlueCols tr:nth-child(even) {
-    background: #398AA4;
-  }
-  table.steelBlueCols thead {
-    background: #398AA4;
-    border-bottom: 10px solid #398AA4;
-  }
-  table.steelBlueCols thead th {
-    font-size: 15px;
-    font-weight: bold;
-    color: #FFFFFF;
-    text-align: left;
-    border-left: 2px solid #398AA4;
-  }
-  table.steelBlueCols thead th:first-child {
-    border-left: none;
-  }
-  
-  table.steelBlueCols tfoot td {
-    font-size: 13px;
-  }
-  table.steelBlueCols tfoot .links {
-    text-align: right;
-  }
-  table.steelBlueCols tfoot .links a{
-    display: inline-block;
-    background: #FFFFFF;
-    color: #398AA4;
-    padding: 2px 8px;
-    border-radius: 5px;
-  }
+.tftable {table-layout:fixed;width: 40%;font-family:"Segoe UI";font-size:12px;color:#333333;border-width: 1px;border-color: #729ea5;border-collapse: collapse;}
+.tftable th {width: 30%;font-size:12px;background-color:#acc8cc;border-width: 1px;padding: 8px;border-style: solid;border-color: #729ea5;text-align:left;}
+.tftable tr {background-color:#d4e3e5;}
+.tftable td {width: 10%font-size:12px;border-width: 1px;padding: 8px;border-style: solid;border-color: #729ea5;}
+.tftable tr:hover {background-color:#ffffff;}
 </style>
 '@
 
@@ -380,14 +360,21 @@ $messageBody += "<head><title>$($messageSubject)</title>"
 $messageBody += '<meta http-equiv="Content-Type content="text/html; charset=ISO-8859-1 />'
 $messageBody += $cssString
 $messageBody += '</head><body>'
-$messageBody += '<table class="steelBlueCols">'
+$messageBody += '<p><font face="Segoe UI"><h3>Summary of Assigned Licenses Count</h3></font></p>'
+$messageBody += '<table class="tftable">'
 $messageBody += '<tr><th>Exchange</th><td>'+("{0:n0}" -f $license.Exchange)+'</td></tr>'
 $messageBody += '<tr><th>SharePoint</th><td>'+("{0:n0}" -f $license.Sharepoint)+'</td></tr>'
 $messageBody += '<tr><th>OneDrive</th><td>'+("{0:n0}" -f $license.OneDrive)+'</td></tr>'
 $messageBody += '<tr><th>Skype for Business</th><td>'+("{0:n0}" -f $license.SkypeForBusiness)+'</td></tr>'
 $messageBody += '<tr><th>Teams</th><td>'+("{0:n0}" -f $license.Teams)+'</td></tr>'
 $messageBody += '<tr><th>Yammer</th><td>'+("{0:n0}" -f $license.Yammer)+'</td></tr>'
-$messageBody += '</table>'
+$messageBody += '</table><hr />'
+$messageBody += '<p><font face="Segoe UI"><h3>End of Report<h3></font></p>'
+$messageBody += '<p><font size="2" face="Segoe UI">'
+$messageBody += 'Source: ' + ($env:COMPUTERNAME) + '<br />'
+$messageBody += 'Script Path: ' + ($MyInvocation.MyCommand.Definition) + '<br />'
+$messageBody += 'Script Version: <a href="' + ($scriptInfo.ProjectURI) + '">'+ ($MyInvocation.MyCommand.Definition.ToString().Split("\")[-1].Split(".")[0]) + ' ' + ($scriptInfo.version) + '</a><br />'
+
 $messageBody += '</body>'
 $messageBody += '</html>'
 $messageBody | out-file $ReportHTML
@@ -419,7 +406,7 @@ $mailBody = @{
 $mailBody = $mailBody | ConvertTo-JSON -Depth 4
 
 #send email
-WriteInfo "Send Email Report"
+WriteInfo "Send Email Report."
 try {
     Invoke-RestMethod -Method Post -Uri $outlookMailApiUri -Body $mailbody -Headers $headerParams -ContentType application/json -ErrorAction STOP
 }
