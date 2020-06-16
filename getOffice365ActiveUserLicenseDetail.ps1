@@ -90,32 +90,6 @@ Param(
 
 #Region FUNCTIONS
 #..........................................................
-Function WriteError
-{
-    param 
-    (
-        [Parameter(Mandatory=$true,Position=0)]
-        [string]$Message
-    )
-    Write-Host (get-date -Format "dd-MMM-yyyy hh:mm:ss tt") ": ERROR: $Message" -ForegroundColor RED
-}
-
-Function WriteInfo
-{
-    param 
-    (
-        [Parameter(Mandatory=$true,Position=0)]
-        [string]$Message
-    )
-    Write-Host (get-date -Format "dd-MMM-yyyy hh:mm:ss tt") ": INFO: $Message" -ForegroundColor Yellow
-}
-#Function to get current system timezone (for PS versions below 5)
-Function Get-TimeZoneInfo
-{  
-	$tzName = ([System.TimeZone]::CurrentTimeZone).StandardName
-	$tzInfo = [System.TimeZoneInfo]::FindSystemTimeZoneById($tzName)
-	Return $tzInfo
-}
 #Function to stop transcribing
 Function Stop-TxnLogging
 {
@@ -141,62 +115,17 @@ Function Start-TxnLogging
 	Stop-TxnLogging
     Start-Transcript $LogFile -Append
 }
-
-#Function to get Script Version and ProjectURI for PS vesions below 5.1
-Function Get-ScriptInfo
-{
-    param
-    (
-        [Parameter(Mandatory=$true,Position=0)]
-        [string]$Path
-	)
-	
-	$scriptFile = Get-Content $Path
-
-	$props = @{
-		Version = ""
-		ProjectURI = ""
-	}
-
-	$scriptInfo = New-Object PSObject -Property $props
-
-	# Get Version
-	foreach ($line in $scriptFile)
-	{	
-		if ($line -like ".VERSION*")
-		{
-			$scriptInfo.Version = $line.Split(" ")[1]
-			BREAK
-		}	
-	}
-
-	# Get ProjectURI
-	foreach ($line in $scriptFile)
-	{
-		if ($line -like ".PROJECTURI*")
-		{
-			$scriptInfo.ProjectURI = $line.Split(" ")[1]
-			BREAK
-		}		
-	}
-	Remove-Variable scriptFile
-    Return $scriptInfo
-}
 #..........................................................
 #EndRegion FUNCTIONS
+
 Stop-TxnLogging
+
+# Force TLS 1.2
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
 $script_root = Split-Path -Parent -Path $MyInvocation.MyCommand.Definition
 $fileSuffix = (Get-Date -Format "dd-MMM-yyyy")
-
-if ($PSVersionTable.psversion.Major -lt 5) 
-{
-    $scriptInfo = Get-ScriptInfo -Path $MyInvocation.MyCommand.Definition
-}
-else 
-{
-    $scriptInfo = Test-ScriptFileInfo -Path $MyInvocation.MyCommand.Definition
-}
+$scriptInfo = Test-ScriptFileInfo -Path $MyInvocation.MyCommand.Definition
 
 #Region Paths
 #..........................................................
@@ -246,20 +175,20 @@ if ($sendEmail -eq $true)
 {
     if (!$From)
     {
-        WriteError "A valid sender email address is not specified."
+        Write-Output "A valid sender email address is not specified."
         $isAllGood = $false
     }
 
     if (!$To)
     {
-        WriteError "No recipient specified."
+        Write-Output "No recipient specified."
         $isAllGood = $false
     }
 }
 
 if ($isAllGood -eq $false)
 {
-    WriteError "Exiting Script."
+    Write-Output "Exiting Script."
     EXIT
 }
 #..........................................................
@@ -272,15 +201,15 @@ if ($To)
 }
 
 #Graph API Token
-WriteInfo "Acquire Graph Token."
+Write-Output "Acquire Graph Token."
 try {
 $body = @{grant_type="client_credentials";scope="https://graph.microsoft.com/.default";client_id=$appID;client_secret=$appKey}
 $oauth = Invoke-RestMethod -Method Post -Uri https://login.microsoftonline.com/$tenantID/oauth2/v2.0/token -Body $body
 $headerParams = @{'Authorization'="$($oauth.token_type) $($oauth.access_token)"}
 }
 catch {
-    WriteError "Error getting Graph Token."
-    WriteError $_.Exception.Message
+    Write-Output "Error getting Graph Token."
+    Write-Output $_.Exception.Message
     EXIT
 }
 
@@ -293,12 +222,12 @@ try {
     $raw = (Invoke-RestMethod -Method Get -Uri $graphApiUri -Headers $headerParams -ErrorAction STOP).Remove(0,3)| ConvertFrom-Csv
 }
 catch {
-    WriteError "Error retrieving data."
-    WriteError $_.Exception.Message
+    Write-Output "Error retrieving data."
+    Write-Output $_.Exception.Message
     EXIT
 }
 $raw | Export-Csv $ReportCSV -NoTypeInformation
-WriteInfo "Report saved to $ReportCSV."
+Write-Output "Report saved to $ReportCSV."
 
 #If sendEmail is not equal to TRUE, exit here.
 if ($sendEmail -ne $true) {EXIT}
@@ -306,12 +235,12 @@ if ($sendEmail -ne $true) {EXIT}
 #Else, continue with email report
 
 #convert attachment to base 64 encoded format
-WriteInfo "Converting Report to Base 64 for use as email attachment."
+Write-Output "Converting Report to Base 64 for use as email attachment."
 $fileContentBytes = [System.Text.Encoding]::UTF8.GetBytes((get-content $ReportCSV -Raw))
 $base64_csv = [System.Convert]::ToBase64String($fileContentBytes)
 
 #Outlook API
-WriteInfo "Acquire Outlook Token."
+Write-Output "Acquire Outlook Token."
 
 try {
     $outlookMailApiUri = "https://outlook.office.com/api/v2.0/users/$($From)/sendmail"
@@ -320,8 +249,8 @@ try {
     $headerParams = @{'Authorization'="$($oauth.token_type) $($oauth.access_token)"}
 }
 catch {
-    WriteError "Error getting Outlook Token."
-    WriteError $_.Exception.Message
+    Write-Output "Error getting Outlook Token."
+    Write-Output $_.Exception.Message
     EXIT
 }
 
@@ -329,7 +258,7 @@ catch {
 # Why use Outlook Mail REST API to send email instead of MS Graph API?
 # Because MS Graph API cannot handle attachments larger than 4MB
 
-WriteInfo "Creating Report."
+Write-Output "Creating Report."
 
 $licenseProps = @{
     Exchange = ($raw | Where-Object {$_."Has Exchange License" -eq $true}).count
@@ -406,12 +335,12 @@ $mailBody = @{
 $mailBody = $mailBody | ConvertTo-JSON -Depth 4
 
 #send email
-WriteInfo "Send Email Report."
+Write-Output "Send Email Report."
 try {
     Invoke-RestMethod -Method Post -Uri $outlookMailApiUri -Body $mailbody -Headers $headerParams -ContentType application/json -ErrorAction STOP
 }
 catch {
-    WriteError "Error sending email."
-    WriteError $_.Exception.Message
+    Write-Output "Error sending email."
+    Write-Output $_.Exception.Message
     EXIT
 }
