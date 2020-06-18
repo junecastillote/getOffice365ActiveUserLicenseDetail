@@ -17,9 +17,9 @@
 
 .PROJECTURI https://github.com/junecastillote/getOffice365ActiveUserLicenseDetail
 
-.ICONURI 
+.ICONURI
 
-.EXTERNALMODULEDEPENDENCIES 
+.EXTERNALMODULEDEPENDENCIES
 
 .REQUIREDSCRIPTS
 
@@ -32,9 +32,9 @@
 
 #>
 
-<# 
+<#
 
-.DESCRIPTION 
+.DESCRIPTION
  Get Active Users' Assigned Licenses using MS Graph API and Outlook Mail REST API, capable of sending the resulting CSV by email.
 
 #>
@@ -53,8 +53,8 @@
     This example will query the License assignment data from Office 365 and save the resuting CSV file in the "C:\Temp" folder. Then send the summary report by email with the CSV file attached.
 #>
 Param(
-    [CmdletBinding()]   
-    
+    [CmdletBinding()]
+
     [Parameter(Mandatory=$true,Position=0)]
     [string]
     $appID,
@@ -97,7 +97,7 @@ Function Stop-TxnLogging
 	Do {
 		try {
 			Stop-Transcript | Out-Null
-		} 
+		}
 		catch [System.InvalidOperationException]{
 			$txnLog="stopped"
 		}
@@ -105,9 +105,9 @@ Function Stop-TxnLogging
 }
 
 #Function to Start transcribing
-Function Start-TxnLogging 
+Function Start-TxnLogging
 {
-    param 
+    param
     (
         [Parameter(Mandatory=$true,Position=0)]
         [string]$LogFile
@@ -213,13 +213,13 @@ catch {
     EXIT
 }
 
-$graphApiUri = "https://graph.microsoft.com/v1.0/organization"
+$activeUserDetailURI = "https://graph.microsoft.com/v1.0/organization"
 
-$organizationName = (Invoke-RestMethod -Method Get -Uri $graphApiUri -Headers $headerParams -ErrorAction STOP).Value.DisplayName
+$organizationName = (Invoke-RestMethod -Method Get -Uri $activeUserDetailURI -Headers $headerParams -ErrorAction STOP).Value.DisplayName
 
-$graphApiUri = "https://graph.microsoft.com/v1.0/reports/getOffice365ActiveUserDetail(period='D30')"
+$activeUserDetailURI = "https://graph.microsoft.com/v1.0/reports/getOffice365ActiveUserDetail(period='D30')"
 try {
-    $raw = (Invoke-RestMethod -Method Get -Uri $graphApiUri -Headers $headerParams -ErrorAction STOP).Remove(0,3)| ConvertFrom-Csv
+    $raw = (Invoke-RestMethod -Method Get -Uri $activeUserDetailURI -Headers $headerParams -ErrorAction STOP).Remove(0,3)| ConvertFrom-Csv
 }
 catch {
     Write-Output "Error retrieving data."
